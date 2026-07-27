@@ -5,6 +5,7 @@ on:
     branches:
       - master
       - dev1
+
   workflow_dispatch:
     inputs:
       environment:
@@ -22,6 +23,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.inputs.environment || github.ref_name }}
 
       - name: Show current branch
         run: echo "Current branch is ${{ github.ref_name }}"
