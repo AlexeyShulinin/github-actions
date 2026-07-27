@@ -1,0 +1,33 @@
+name: GitHub Foundations
+
+on:
+  push:
+    branches:
+      - master
+      - dev1
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Choose branch to deploy'
+        required: true
+        default: 'master'
+        type: choice
+        options:
+          - master
+          - dev1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Show current branch
+        run: echo "Current branch is ${{ github.ref_name }}"
+      
+      - name: Show current event
+        run: echo "Current event is ${{ github.event_name }}"
+
+      - name: Show branch file
+        run: cat foundations_readme.md
