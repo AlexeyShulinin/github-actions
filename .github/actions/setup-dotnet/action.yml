@@ -4,9 +4,11 @@ description: "Sets up .NET SDK, checks the project, runs tests, and uploads a co
 inputs:
   dotnet-version:
     required: true
+    type: string
     default: "10.0.x"
   project-name:
     required: true
+    type: string
     default: "ProjectName"
   
 runs:
