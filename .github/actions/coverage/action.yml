@@ -27,33 +27,84 @@ runs:
         import os
         import xml.etree.ElementTree as ET
 
+        search_roots = {
+            Path(os.environ["RESULTS_DIRECTORY"]),
+            Path(os.environ["GITHUB_WORKSPACE"]),
+        }
         reports = sorted(
-            Path(os.environ["RESULTS_DIRECTORY"]).rglob("coverage.cobertura.xml")
+            {
+                report.resolve()
+                for root in search_roots
+                if root.exists()
+                for report in root.rglob("coverage.cobertura.xml")
+            }
         )
+
+        def percent(rate):
+            return f"{float(rate) * 100:.1f}%"
+
         print("## Test coverage\n")
         if not reports:
             print(
-                "No Cobertura coverage reports were generated. "
-                "Ensure the test project references `coverlet.collector`."
+                "No `coverage.cobertura.xml` report was found in the test results "
+                "directory or workspace."
             )
         else:
-            print("| Report | Line coverage | Lines covered | Branch coverage |")
-            print("| --- | ---: | ---: | ---: |")
             for report in reports:
                 coverage = ET.parse(report).getroot()
-                line_rate = float(coverage.attrib["line-rate"]) * 100
-                lines = (
-                    f'{coverage.attrib["lines-covered"]}/'
-                    f'{coverage.attrib["lines-valid"]}'
+                print(f"### `{report.name}`\n")
+                print("| Metric | Covered | Total | Coverage |")
+                print("| --- | ---: | ---: | ---: |")
+                print(
+                    f'| Lines | {coverage.attrib["lines-covered"]} | '
+                    f'{coverage.attrib["lines-valid"]} | '
+                    f'{percent(coverage.attrib["line-rate"])} |'
                 )
                 branches_valid = int(coverage.attrib["branches-valid"])
                 branch_rate = (
-                    f'{float(coverage.attrib["branch-rate"]) * 100:.1f}%'
+                    percent(coverage.attrib["branch-rate"])
                     if branches_valid
                     else "N/A"
                 )
                 print(
-                    f"| `{report.name}` | {line_rate:.1f}% | {lines} | "
-                    f"{branch_rate} |"
+                    f'| Branches | {coverage.attrib["branches-covered"]} | '
+                    f'{branches_valid} | {branch_rate} |\n'
                 )
+
+                packages = coverage.findall("./packages/package")
+                if packages:
+                    print("#### Packages\n")
+                    print("| Package | Line coverage | Branch coverage |")
+                    print("| --- | ---: | ---: |")
+                    for package in sorted(
+                        packages, key=lambda item: item.attrib.get("name", "")
+                    ):
+                        print(
+                            f'| `{package.attrib.get("name", "unknown")}` | '
+                            f'{percent(package.attrib.get("line-rate", "0"))} | '
+                            f'{percent(package.attrib.get("branch-rate", "0"))} |'
+                        )
+                    print()
+
+                classes = coverage.findall("./packages/package/classes/class")
+                if classes:
+                    print("#### Classes\n")
+                    print("| Class / file | Lines covered | Line coverage |")
+                    print("| --- | ---: | ---: |")
+                    rows = []
+                    for item in classes:
+                        line_elements = item.findall("./lines/line")
+                        total = len(line_elements)
+                        covered = sum(
+                            int(line.attrib.get("hits", "0")) > 0
+                            for line in line_elements
+                        )
+                        rate = covered / total if total else 0
+                        label = item.attrib.get("filename", item.attrib.get("name", ""))
+                        rows.append((rate, label, covered, total))
+                    for rate, label, covered, total in sorted(rows):
+                        print(
+                            f"| `{label}` | {covered}/{total} | {rate * 100:.1f}% |"
+                        )
+                    print()
         PY
