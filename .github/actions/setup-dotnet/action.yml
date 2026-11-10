@@ -44,6 +44,6 @@ runs:
       shell: bash
 
     - name: Unit tests with coverage
-      uses: ./.github/actions/coverage
+      uses: ./.github/actions/coverage@master
       with:
         project-path: ${{ inputs.project-name }}
