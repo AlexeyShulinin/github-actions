@@ -46,4 +46,4 @@ runs:
     - name: Unit tests with coverage
       uses: AlexeyShulinin/github-actions/.github/actions/coverage@master
       with:
-        project-path: ${{ inputs.project-name }}
+        project-path: .
