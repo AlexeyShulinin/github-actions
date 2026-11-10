@@ -44,12 +44,6 @@ runs:
       shell: bash
 
     - name: Unit tests with coverage
-      run: dotnet test --collect:"XPlat Code Coverage" --results-directory ./TestResults
-      shell: bash
-
-    - name: Upload coverage report
-      uses: actions/upload-artifact@v4
+      uses: ./.github/actions/coverage
       with:
-        name: dotnet-coverage
-        path: "**/TestResults/**/coverage.cobertura.xml"
-        if-no-files-found: error
+        project-path: ${{ inputs.project-name }}

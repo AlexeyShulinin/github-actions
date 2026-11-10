@@ -1,0 +1,59 @@
+name: .NET test coverage
+description: Runs dotnet tests with XPlat coverage and adds a coverage table to the job summary.
+
+inputs:
+  project-path:
+    description: Path to a test project, solution, or directory.
+    required: false
+    default: .
+
+runs:
+  using: composite
+  steps:
+    - name: Run tests with coverage
+      shell: bash
+      env:
+        TEST_PROJECT_PATH: ${{ inputs.project-path }}
+      run: dotnet test "$TEST_PROJECT_PATH" --collect:"XPlat Code Coverage" --results-directory "$RUNNER_TEMP/dotnet-coverage"
+
+    - name: Add coverage summary
+      if: always()
+      shell: bash
+      env:
+        RESULTS_DIRECTORY: ${{ runner.temp }}/dotnet-coverage
+      run: |
+        python3 - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+        from pathlib import Path
+        import os
+        import xml.etree.ElementTree as ET
+
+        reports = sorted(
+            Path(os.environ["RESULTS_DIRECTORY"]).rglob("coverage.cobertura.xml")
+        )
+        print("## Test coverage\n")
+        if not reports:
+            print(
+                "No Cobertura coverage reports were generated. "
+                "Ensure the test project references `coverlet.collector`."
+            )
+        else:
+            print("| Report | Line coverage | Lines covered | Branch coverage |")
+            print("| --- | ---: | ---: | ---: |")
+            for report in reports:
+                coverage = ET.parse(report).getroot()
+                line_rate = float(coverage.attrib["line-rate"]) * 100
+                lines = (
+                    f'{coverage.attrib["lines-covered"]}/'
+                    f'{coverage.attrib["lines-valid"]}'
+                )
+                branches_valid = int(coverage.attrib["branches-valid"])
+                branch_rate = (
+                    f'{float(coverage.attrib["branch-rate"]) * 100:.1f}%'
+                    if branches_valid
+                    else "N/A"
+                )
+                print(
+                    f"| `{report.name}` | {line_rate:.1f}% | {lines} | "
+                    f"{branch_rate} |"
+                )
+        PY
