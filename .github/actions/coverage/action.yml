@@ -17,8 +17,8 @@ runs:
       run: dotnet test "$TEST_PROJECT_PATH" --collect:"XPlat Code Coverage" --results-directory "$RUNNER_TEMP/dotnet-coverage"
 
     - name: Add coverage summary
-      if: always()
-      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
+      if: always() && runner.os != 'Windows'
+      shell: bash
       env:
         RESULTS_DIRECTORY: ${{ runner.temp }}/dotnet-coverage
       run: |
@@ -108,3 +108,106 @@ runs:
                         )
                     print()
         PY
+
+    - name: Add coverage summary
+      if: always() && runner.os == 'Windows'
+      shell: pwsh
+      env:
+        RESULTS_DIRECTORY: ${{ runner.temp }}/dotnet-coverage
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $summary = [System.Collections.Generic.List[string]]::new()
+        $summary.Add('## Test coverage')
+        $summary.Add('')
+
+        $searchRoots = @($env:RESULTS_DIRECTORY, $env:GITHUB_WORKSPACE) |
+          Where-Object { Test-Path -LiteralPath $_ -PathType Container }
+        $reports = @(
+          foreach ($root in $searchRoots) {
+            Get-ChildItem -LiteralPath $root -Filter 'coverage.cobertura.xml' -File -Recurse |
+              Select-Object -ExpandProperty FullName
+          }
+        ) | Sort-Object -Unique
+
+        if (-not $reports) {
+          $summary.Add('No `coverage.cobertura.xml` report was found in the test results directory or workspace.')
+        } else {
+          foreach ($report in $reports) {
+            [xml]$coverage = Get-Content -LiteralPath $report -Raw
+            $root = $coverage.DocumentElement
+            $summary.Add("### ``$(Split-Path -Leaf $report)``")
+            $summary.Add('')
+            $summary.Add('| Metric | Covered | Total | Coverage |')
+            $summary.Add('| --- | ---: | ---: | ---: |')
+
+            $lineRate = [double]::Parse($root.GetAttribute('line-rate'), [cultureinfo]::InvariantCulture)
+            $summary.Add(('| Lines | {0} | {1} | {2:N1}% |' -f
+              $root.GetAttribute('lines-covered'),
+              $root.GetAttribute('lines-valid'),
+              ($lineRate * 100)))
+
+            $branchesValid = [int]::Parse($root.GetAttribute('branches-valid'), [cultureinfo]::InvariantCulture)
+            $branchRate = if ($branchesValid) {
+              '{0:N1}%' -f ([double]::Parse($root.GetAttribute('branch-rate'), [cultureinfo]::InvariantCulture) * 100)
+            } else {
+              'N/A'
+            }
+            $summary.Add(('| Branches | {0} | {1} | {2} |' -f
+              $root.GetAttribute('branches-covered'),
+              $branchesValid,
+              $branchRate))
+            $summary.Add('')
+
+            $packages = @($root.SelectNodes('packages/package'))
+            if ($packages.Count) {
+              $summary.Add('#### Packages')
+              $summary.Add('')
+              $summary.Add('| Package | Line coverage | Branch coverage |')
+              $summary.Add('| --- | ---: | ---: |')
+              foreach ($package in ($packages | Sort-Object { $_.GetAttribute('name') })) {
+                $packageName = $package.GetAttribute('name')
+                $packageLineRate = [double]::Parse($package.GetAttribute('line-rate'), [cultureinfo]::InvariantCulture)
+                $packageBranchRate = [double]::Parse($package.GetAttribute('branch-rate'), [cultureinfo]::InvariantCulture)
+                $summary.Add(('| ``{0}`` | {1:N1}% | {2:N1}% |' -f
+                  $packageName,
+                  ($packageLineRate * 100),
+                  ($packageBranchRate * 100)))
+              }
+              $summary.Add('')
+            }
+
+            $classes = @($root.SelectNodes('packages/package/classes/class'))
+            if ($classes.Count) {
+              $summary.Add('#### Classes')
+              $summary.Add('')
+              $summary.Add('| Class / file | Lines covered | Line coverage |')
+              $summary.Add('| --- | ---: | ---: |')
+              $rows = foreach ($class in $classes) {
+                $lines = @($class.SelectNodes('lines/line'))
+                $total = $lines.Count
+                $covered = @($lines | Where-Object { [int]::Parse($_.GetAttribute('hits'), [cultureinfo]::InvariantCulture) -gt 0 }).Count
+                $rate = if ($total) { $covered / $total } else { 0 }
+                $label = $class.GetAttribute('filename')
+                if (-not $label) {
+                  $label = $class.GetAttribute('name')
+                }
+                [pscustomobject]@{
+                  Rate = $rate
+                  Label = $label
+                  Covered = $covered
+                  Total = $total
+                }
+              }
+              foreach ($row in ($rows | Sort-Object Rate, Label)) {
+                $summary.Add(('| ``{0}`` | {1}/{2} | {3:N1}% |' -f
+                  $row.Label,
+                  $row.Covered,
+                  $row.Total,
+                  ($row.Rate * 100)))
+              }
+              $summary.Add('')
+            }
+          }
+        }
+
+        Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ($summary -join [Environment]::NewLine) -Encoding utf8
