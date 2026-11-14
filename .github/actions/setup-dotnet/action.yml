@@ -8,9 +8,6 @@ inputs:
   project-name:
     required: true
     default: "ProjectName"
-
-env:
-  ACTION_SHELL: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
   
 runs:
   using: "composite"
@@ -32,19 +29,19 @@ runs:
     # Even for cache-hit, we still need to restore assets (project.assets.json).
     - name: Restore
       run: dotnet restore
-      shell: ${{ env.ACTION_SHELL }}
+      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
 
     - name: Build
       run: dotnet build ${{ inputs.project-name }} --configuration Release --no-restore
-      shell: ${{ env.ACTION_SHELL }}
+      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
 
     - name: Format check
       run: dotnet format --verify-no-changes
-      shell: ${{ env.ACTION_SHELL }}
+      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
 
     - name: Code analysis
       run: dotnet format analyzers --verify-no-changes
-      shell: ${{ env.ACTION_SHELL }}
+      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
 
     - name: Unit tests with coverage
       uses: AlexeyShulinin/github-actions/.github/actions/coverage@master

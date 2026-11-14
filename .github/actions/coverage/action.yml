@@ -7,21 +7,18 @@ inputs:
     required: false
     default: .
 
-env:
-  ACTION_SHELL: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
-
 runs:
   using: composite
   steps:
     - name: Run tests with coverage
-      shell: ${{ env.ACTION_SHELL }}
+      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       env:
         TEST_PROJECT_PATH: ${{ inputs.project-path }}
       run: dotnet test "$TEST_PROJECT_PATH" --collect:"XPlat Code Coverage" --results-directory "$RUNNER_TEMP/dotnet-coverage"
 
     - name: Add coverage summary
       if: always()
-      shell: ${{ env.ACTION_SHELL }}
+      shell: ${{ runner.os == 'Windows' && 'pwsh' || 'bash' }}
       env:
         RESULTS_DIRECTORY: ${{ runner.temp }}/dotnet-coverage
       run: |
